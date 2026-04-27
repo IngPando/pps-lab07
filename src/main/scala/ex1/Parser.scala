@@ -1,5 +1,7 @@
 package ex1
 
+import ex1.Parsers.charParser
+
 /** Consider the Parser example shown in previous lesson. Analogously to
   * NonEmpty, create a mixin NotTwoConsecutive, which adds the idea that one
   * cannot parse two consecutive elements which are equal. Use it (as a mixin)
@@ -14,7 +16,19 @@ abstract class Parser[T]:
     (seq forall parse) & end // note &, not &&
 
 object Parsers:
-  val todo = ??? // put the extensions here..
+  extension (s: String)
+    def charParser(): Parser[Char] = new Parser[Char] {
+      private var allowed: Set[Char] = s.toSet
+      private var valid = true
+      override def parse(t: Char): Boolean = {
+        if !allowed.contains(t) then valid = false
+        valid
+      }
+
+      override def end: Boolean = valid
+    }
+
+
 class BasicParser(chars: Set[Char]) extends Parser[Char]:
   override def parse(t: Char): Boolean = chars.contains(t)
   override def end: Boolean = true
@@ -31,14 +45,45 @@ class NonEmptyParser(chars: Set[Char])
     with NonEmpty[Char]
 
 trait NotTwoConsecutive[T] extends Parser[T]:
-  val todo = ???
-// ???
+  private[this] var previousElementIsEqual = false
+  var lastChar: Option[T] = None
+  abstract override def parse(t: T): Boolean = {
+    lastChar match
+      case Some(prev) if t == prev => previousElementIsEqual = true;
+      case _ =>
+    lastChar = Some(t)
+    super.parse(t)
+  }
+
+  abstract override def end: Boolean = !previousElementIsEqual && super.end
+
+
 
 class NotTwoConsecutiveParser(chars: Set[Char])
-    extends BasicParser(chars) // with ????
+    extends BasicParser(chars)
+    with NotTwoConsecutive[Char]// with ????
+
+
+
+trait ShortenThenN[T](n: Int) extends Parser[T]:
+  
+  var valid = true
+  var length = 0
+  
+  abstract override def parse(t: T): Boolean =
+    if length >= n then 
+      valid = false
+    else 
+      length += 1
+
+    valid && super.parse(t)
+
+  abstract override def end: Boolean = valid && super.end
+
 
 @main def checkParsers(): Unit =
   def parser = new BasicParser(Set('a', 'b', 'c'))
+  println("BasicParser")
   println(parser.parseAll("aabc".toList)) // true
   println(parser.parseAll("aabcdc".toList)) // false
   println(parser.parseAll("".toList)) // true
@@ -46,12 +91,14 @@ class NotTwoConsecutiveParser(chars: Set[Char])
   // Note NonEmpty being "stacked" on to a concrete class
   // Bottom-up decorations: NonEmptyParser -> NonEmpty -> BasicParser -> Parser
   def parserNE = new NonEmptyParser(Set('0', '1'))
+  println("NonEmptyParser")
   println(parserNE.parseAll("0101".toList)) // true
   println(parserNE.parseAll("0123".toList)) // false
   println(parserNE.parseAll(List())) // false
 
   // NotTwoConsecutive[Char] -> BasicParser -> Parser[Char]
   def parserNTC = new NotTwoConsecutiveParser(Set('X', 'Y', 'Z'))
+  println("NotTwoConsecutiveParser")
   println(parserNTC.parseAll("XYZ".toList)) // true
   println(parserNTC.parseAll("XYYZ".toList)) // false
   println(parserNTC.parseAll("".toList)) // true
@@ -60,11 +107,13 @@ class NotTwoConsecutiveParser(chars: Set[Char])
   def parserNTCNE = new BasicParser(Set('X', 'Y', 'Z'))
     with NotTwoConsecutive[Char]
     with NonEmpty[Char]
+  println("NonTwoConsecutive and NonEmpty")
   println(parserNTCNE.parseAll("XYZ".toList)) // true
   println(parserNTCNE.parseAll("XYYZ".toList)) // false
   println(parserNTCNE.parseAll("".toList)) // false
 
-  def sparser: Parser[Char] = ??? // "abc".charParser()
+  def sparser: Parser[Char] = "abc".charParser()
   println(sparser.parseAll("aabc".toList)) // true
   println(sparser.parseAll("aabcdc".toList)) // false
   println(sparser.parseAll("".toList)) // true
+
